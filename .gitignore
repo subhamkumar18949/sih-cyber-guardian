@@ -1,0 +1,24 @@
+# Python virtual environment
+venv/
+__pycache__/
+
+# AI Models & Training Artifacts
+backend/results/
+backend/my_custom_ai_detector/
+backend/logs/
+*.pt
+*.safetensors
+
+# Node.js dependencies
+node_modules/
+frontend/node_modules/
+
+# Foundry build artifacts
+cache/
+out/
+broadcast/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
