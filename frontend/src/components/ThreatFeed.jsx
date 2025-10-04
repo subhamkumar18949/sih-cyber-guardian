@@ -10,20 +10,23 @@ const ThreatFeed = () => {
   ];
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-lg p-6">
-      <h2 className="text-2xl font-bold text-white mb-4 flex items-center"><FiList className="mr-2 text-cyan-400"/> Live Threat Feed (Blockchain)</h2>
-      <div className="space-y-3">
-        {mockThreats.map((threat, index) => (
-          <div key={index} className="bg-gray-900 p-3 rounded-md flex justify-between items-center">
-            <div>
-              <div className="text-red-400 text-sm">{threat.type}</div>
-              <div className="text-xs text-gray-400 truncate">{threat.hash}</div>
-            </div>
-            <a href="#" className="text-cyan-400 text-xs hover:underline">Verify</a>
-          </div>
-        ))}
+  <div className="threat-feed-container">
+  <h2 className="threat-feed-title">
+    <FiList className="threat-feed-icon"/> 
+    Live Threat Feed (Blockchain)
+  </h2>
+  <div className="threat-feed-list">
+    {mockThreats.map((threat, index) => (
+      <div key={index} className="threat-item">
+        <div className="threat-item-info">
+          <div className="threat-type">{threat.type}</div>
+          <div className="threat-hash">{threat.hash}</div>
+        </div>
+        <a href="#" className="threat-verify-link">Verify</a>
       </div>
-    </div>
+    ))}
+  </div>
+</div>
   );
 };
 
