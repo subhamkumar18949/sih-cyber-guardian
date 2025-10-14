@@ -15,7 +15,7 @@ const ThreatFeed = () => {
   ];
 
   return (
-    <div className="w-full max-w-5xl p-6 bg-gray-800 rounded-xl shadow-2xl border border-cyan-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)] transition-all duration-300">
+    <div className="w-full max-w-5xl p-6 bg-gray-800 rounded-xxxl shadow-2xl border border-cyan-400/50 shadow-[0_0_15px_rgba(56,189,248,0.4)] transition-all duration-300">
       <h2 className="flex items-center text-xl font-bold text-white mb-4">
         <FiList className="mr-3 text-cyan-400"/> 
         Live Threat Feed (Blockchain)
