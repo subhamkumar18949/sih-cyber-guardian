@@ -1,145 +1,269 @@
 import React, { useState } from 'react';
-import axios from 'axios';
-// ADDED: Link for navigation and FiClock for the icon
-import { Link } from 'react-router-dom'; 
-import { FiUpload, FiType, FiCpu, FiList, FiAlertTriangle, FiCheckCircle, FiClock } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 
-//==================================================================
-//  1. Analyzer Component: (No changes here)
-//==================================================================
-const Analyzer = ({ setIsLoading, setResult, setError }) => {
+
+// --- ICONS (Consolidated from all files) ---
+const FiUpload = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>;
+const FiType = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>;
+const FiCpu = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect><rect x="9" y="9" width="6" height="6"></rect><line x1="9" y1="1" x2="9" y2="4"></line><line x1="15" y1="1" x2="15" y2="4"></line><line x1="9" y1="20" x2="9" y2="23"></line><line x1="15" y1="20" x2="15" y2="23"></line><line x1="20" y1="9" x2="23" y2="9"></line><line x1="20" y1="14" x2="23" y2="14"></line><line x1="1" y1="9" x2="4" y2="9"></line><line x1="1" y1="14" x2="4" y2="14"></line></svg>;
+const FiFile = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>;
+const FiList = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>;
+const FiXCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>;
+const FiCheckCircle = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>;
+const FiClock = () => <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>;
+
+const Spinner = () => (
+    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+    </svg>
+);
+
+// --- COMPONENT 1: Analyzer (Input Form) ---
+const Analyzer = ({ isLoading, setResult, setError, setIsLoading }) => {
   const [inputText, setInputText] = useState('');
   const [file, setFile] = useState(null);
-  const [isLocalLoading, setLocalLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('text');
+  const [isDragOver, setIsDragOver] = useState(false);
+  const mockMode = true;
 
-  // Enable this to mock backend responses for testing
-  const mockMode = false;
+  const resetState = () => {
+    setResult(null);
+    setError('');
+  };
+
+  const handleFileChange = (selectedFile) => {
+    if (selectedFile) {
+        resetState();
+        setFile(selectedFile);
+        setInputText('');
+    }
+  };
+
+  const clearFile = () => {
+    resetState();
+    setFile(null);
+  };
 
   const handleAnalyze = async () => {
     setIsLoading(true);
-    setLocalLoading(true);
-    setResult(null);
-    setError('');
+    resetState();
 
     try {
       if (mockMode) {
-        await new Promise(res => setTimeout(res, 1200));
+        await new Promise(res => setTimeout(res, 1500));
+        const isThreat = Math.random() > 0.5;
         setResult({
-          is_threat: Math.random() > 0.5,
-          threat_type: "AI-Generated Content",
-          confidence_score: Math.random(),
-          input_type: file ? 'file' : 'text',
-          file_name: file ? file.name : null,
+          is_threat: isThreat,
+          threat_score: isThreat ? (0.7 + Math.random() * 0.28) : (Math.random() * 0.3),
+          threat_category: isThreat ? 'AI-Generated Disinformation' : 'N/A',
+          sentiment: isThreat ? 'Negative' : 'Positive',
+          sentiment_score: Math.random() * 0.9 + 0.1,
+          input_summary: file ? `Analysis of file: ${file.name}` : 'Analysis of text snippet.',
         });
       } else {
-        if (file) {
-          const formData = new FormData();
-          formData.append('file', file);
-          const endpoint = file.type.startsWith('video/') ? '/analyze-video' : '/analyze-image';
-          const response = await axios.post(`http://127.0.0.1:8000${endpoint}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-          });
-          setResult(response.data);
-        } else {
-          const response = await axios.post('http://127.0.0.1:8000/analyze', { text: inputText });
-          setResult(response.data);
-        }
+        // Your real API call logic would go here
+        throw new Error("Backend not connected in this demo.");
       }
     } catch (err) {
-      setError("Analysis failed. Please check if the backend server is running.");
+      setError(err.message || "Analysis failed. Please try again.");
+      console.error(err);
     } finally {
       setIsLoading(false);
-      setLocalLoading(false);
     }
   };
   
-  const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
-    setInputText('');
-  };
-
-  const handleTextChange = (e) => {
-    setInputText(e.target.value);
-    setFile(null);
-  }
+  const tabClass = (tabName) => `flex items-center justify-center w-full px-4 py-2.5 text-sm font-medium rounded-lg transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500 ${activeTab === tabName ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`;
+  const dropzoneClasses = `relative flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer transition-colors duration-300 ${isDragOver ? 'border-indigo-500 bg-gray-700' : 'border-gray-600 bg-gray-800 hover:bg-gray-700'}`;
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-lg backdrop-blur-sm">
-      <h2 className="text-2xl font-semibold text-cyan-400 flex items-center mb-4">
-        <FiCpu className="mr-3" />
-        Analyze Content
-      </h2>
-      
-      <div className="space-y-4">
-        <textarea
-          className="w-full bg-gray-900 border border-gray-600 rounded-md p-3 focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition duration-200 resize-none h-32"
-          placeholder="Paste text to analyze..."
-          value={inputText}
-          onChange={handleTextChange}
-        />
-        
-        <div className="text-center text-gray-400">OR</div>
+    <div className="w-full max-w-lg p-6 bg-gray-800 rounded-xl shadow-2xl space-y-6 border border-gray-700">
+      <div className="text-center">
+        <h2 className="text-2xl font-bold text-white">AI Content Analyzer</h2>
+        <p className="text-gray-400 mt-1">Submit text, an image, or a video for analysis.</p>
+      </div>
 
-        <div className="relative border-2 border-dashed border-gray-600 rounded-lg p-6 text-center cursor-pointer hover:border-cyan-500 hover:bg-gray-800/60 transition duration-200">
-          <FiUpload className="mx-auto h-10 w-10 text-gray-500 mb-2" />
-          <span className="text-gray-300">
-            {file ? `Selected: ${file.name}` : 'Upload an Image or Video'}
-          </span>
-          <input
-            type="file"
-            className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
-            onChange={handleFileChange}
-            accept="image/*,video/*"
-          />
-        </div>
-        
-        <button
-          onClick={handleAnalyze}
-          disabled={isLocalLoading || (!inputText && !file)}
-          className="w-full mt-4 bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out disabled:bg-gray-600 disabled:cursor-not-allowed flex items-center justify-center text-lg"
-        >
-          {isLocalLoading ? (
-            <>
-              <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Analyzing...
-            </>
-          ) : 'Analyze'}
+      <div className="grid grid-cols-2 gap-4 p-1 bg-gray-900 rounded-lg">
+        <button onClick={() => { setActiveTab('text'); clearFile(); }} className={tabClass('text')}>
+          <FiType className="mr-2" /> Text
+        </button>
+        <button onClick={() => { setActiveTab('file'); resetState(); setInputText(''); }} className={tabClass('file')}>
+          <FiUpload className="mr-2" /> File
         </button>
       </div>
+
+      <div>
+        {activeTab === 'text' ? (
+          <textarea
+            className="w-full h-48 p-3 text-gray-300 bg-gray-900 border border-gray-700 rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
+            placeholder="Paste your text here to be analyzed..."
+            value={inputText}
+            onChange={(e) => { setInputText(e.target.value); setFile(null); resetState(); }}
+          />
+        ) : (
+          <div className="space-y-4">
+            {file ? (
+              <div className="flex items-center justify-between p-3 bg-gray-900 text-white rounded-lg border border-gray-700">
+                <div className="flex items-center space-x-3 overflow-hidden">
+                  <FiFile className="text-indigo-400 w-6 h-6 flex-shrink-0" />
+                  <span className="text-sm font-medium truncate">{file.name}</span>
+                </div>
+                <button onClick={clearFile} className="text-gray-400 hover:text-white transition-colors">
+                  <FiXCircle className="w-5 h-5"/>
+                </button>
+              </div>
+            ) : (
+              <label
+                className={dropzoneClasses}
+                onDragEnter={(e) => { e.preventDefault(); setIsDragOver(true); }}
+                onDragLeave={(e) => { e.preventDefault(); setIsDragOver(false); }}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setIsDragOver(false);
+                  if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleFileChange(e.dataTransfer.files[0]);
+                  }
+                }}
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6 text-gray-400">
+                  <FiUpload className="w-8 h-8 mb-4"/>
+                  <p className="mb-2 text-sm"><span className="font-semibold text-indigo-400">Click to upload</span> or drag and drop</p>
+                  <p className="text-xs">Image or Video (MAX. 50MB)</p>
+                </div>
+                <input type="file" className="hidden" onChange={(e) => handleFileChange(e.target.files[0])} accept="image/*,video/*"/>
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={handleAnalyze}
+        disabled={isLoading || (!inputText && !file)}
+        className="w-full flex items-center justify-center gap-2 px-4 py-3 text-base font-semibold text-white bg-indigo-600 rounded-lg shadow-lg hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 focus:ring-indigo-500"
+      >
+        {isLoading ? (
+          <><Spinner /> Analyzing...</>
+        ) : (
+          <><FiCpu /> Analyze Now</>
+        )}
+      </button>
     </div>
   );
 };
 
-//====================================================================
-//  2. ThreatFeed Component: (No changes here)
-//====================================================================
+// --- COMPONENT 2: Results (Display Panel) ---
+const Results = ({ isLoading, result, error }) => {
+    const renderContent = () => {
+        if (isLoading) {
+            return (
+                <div className="w-full max-w-lg p-6 bg-gray-800 border border-gray-700 rounded-xl shadow-lg flex flex-col items-center justify-center min-h-[200px]">
+                    <svg className="animate-spin h-8 w-8 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <p className="text-gray-400 mt-4 text-sm">Analyzing content, please wait...</p>
+                </div>
+            );
+        }
+
+        if (error) {
+            return (
+                <div className="w-full max-w-lg p-6 bg-red-900/20 border border-red-500/50 rounded-xl shadow-lg animate-fade-in">
+                    <div className="flex items-center">
+                        <FiXCircle className="w-6 h-6 text-red-400 mr-3" />
+                        <div>
+                            <h3 className="font-semibold text-red-300">Analysis Error</h3>
+                            <p className="text-red-400 text-sm">{error}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        if (!result) {
+            return (
+                <div className="w-full max-w-lg p-6 bg-gray-800 border border-dashed border-gray-700 rounded-xl shadow-lg flex flex-col items-center justify-center min-h-[200px] text-center">
+                    <FiCpu className="w-10 h-10 text-gray-600 mb-3" />
+                    <h3 className="font-semibold text-gray-500">Analysis Report</h3>
+                    <p className="text-gray-600 text-sm">Your results will appear here.</p>
+                </div>
+            );
+        }
+
+        const isThreat = result.is_threat;
+        const statusBg = isThreat ? 'bg-red-500/10' : 'bg-green-500/10';
+        const statusText = isThreat ? 'text-red-400' : 'text-green-400';
+        const statusBorder = isThreat ? 'border-red-500/50' : 'border-green-500/50';
+        const statusGlow = isThreat ? 'shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'shadow-[0_0_15px_rgba(34,197,94,0.3)]';
+
+        return (
+            <div className={`w-full max-w-lg p-6 bg-gray-800/80 backdrop-blur-sm border ${statusBorder} ${statusGlow} rounded-xl shadow-2xl animate-fade-in`}>
+                <h2 className="text-xl font-bold text-white mb-4">Analysis Report</h2>
+                <div className={`flex items-center p-3 rounded-lg mb-6 ${statusBg}`}>
+                    {isThreat ? <FiXCircle className={`w-6 h-6 mr-3 ${statusText}`} /> : <FiCheckCircle className={`w-6 h-6 mr-3 ${statusText}`} />}
+                    <span className={`text-lg font-bold ${statusText}`}>{isThreat ? 'THREAT DETECTED' : 'NO THREAT DETECTED'}</span>
+                </div>
+                <div className="space-y-4 text-sm">
+                    {Object.entries(result).map(([key, value]) => {
+                        if (value === null || key === 'is_threat') return null;
+                        const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+
+                        if (typeof value === 'number' && (key.toLowerCase().includes('score') || key.toLowerCase().includes('confidence'))) {
+                            const percentage = (value * 100).toFixed(1);
+                            let barColor = "bg-green-500";
+                            if (value > 0.7) barColor = "bg-red-500";
+                            else if (value > 0.4) barColor = "bg-yellow-500";
+
+                            return (
+                                <div key={key} className="p-3 bg-gray-900/50 rounded-lg border border-gray-700/50">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <span className="text-gray-400 font-semibold">{formattedKey}</span>
+                                        <span className={`font-mono font-bold ${barColor.replace('bg-','text-')}`}>{percentage}%</span>
+                                    </div>
+                                    <div className="w-full bg-gray-700 rounded-full h-2"><div className={`${barColor} h-2 rounded-full`} style={{ width: `${percentage}%` }}></div></div>
+                                </div>
+                            );
+                        }
+
+                        const isLongText = typeof value === 'string' && value.length > 35;
+                        return (
+                            <div key={key} className={`p-3 bg-gray-900/50 rounded-lg border border-gray-700/50 flex justify-between items-center ${isLongText ? 'flex-col items-start' : ''}`}>
+                                <div className="text-gray-400 font-semibold">{formattedKey}</div>
+                                <div className={`font-mono text-gray-200 ${isLongText ? 'mt-1 text-left w-full' : 'truncate'}`}>{String(value)}</div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+    return renderContent();
+};
+
+// --- COMPONENT 3: ThreatFeed (Blockchain Data) ---
 const ThreatFeed = () => {
   const mockThreats = [
     { hash: '0x459294f224333c2c506dfd1d8db08bb4...', type: 'AI-Generated Text' },
     { hash: '0x8abcfa21a645934091c0811d74071c10...', type: 'AI-Generated Image' },
     { hash: '0x123f1344cd1fd0a4f28419497f9722a3...', type: 'Toxic Content' },
-    { hash: '0xd4e5e8f8c21e3c...e4a7b9f8d1c3a0b1', type: 'Deepfake Video' },
   ];
 
   return (
-    <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 shadow-lg backdrop-blur-sm">
-      <h2 className="text-2xl font-semibold text-teal-400 mb-4 flex items-center">
-        <FiList className="mr-3" />
+    <div className="w-full max-w-lg p-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700">
+      <h2 className="text-xl font-bold text-white mb-4 flex items-center">
+        <FiList className="mr-3 text-indigo-400"/>
         Live Threat Feed
       </h2>
       <div className="space-y-3">
         {mockThreats.map((threat, index) => (
-          <div key={index} className="bg-gray-900/70 p-3 rounded-md flex justify-between items-center border border-gray-700/50">
+          <div key={index} className="p-3 bg-gray-900/70 rounded-lg border border-gray-700/50 flex items-center justify-between transition-all hover:border-indigo-500/50">
             <div>
-              <div className="font-medium text-white">{threat.type}</div>
-              <div className="text-xs text-gray-400 font-mono tracking-tighter">{threat.hash}</div>
+              <p className="text-sm font-semibold text-indigo-300">{threat.type}</p>
+              <p className="text-xs text-gray-400 font-mono mt-1">{threat.hash}</p>
             </div>
-            <a href="#" className="text-cyan-400 hover:text-cyan-300 text-sm font-semibold transition-colors">
-              Verify
-            </a>
+            
           </div>
         ))}
       </div>
@@ -147,138 +271,126 @@ const ThreatFeed = () => {
   );
 };
 
-//==================================================================
-//  3. Results Component: (No changes here)
-//==================================================================
-const Results = ({ isLoading, result, error }) => {
-  if (isLoading) {
+// --- History Page Component ---
+const History = ({ setPage }) => {
+    const mockHistory = [
+      { id: 1, summary: 'Analysis of text snippet.', threat: true, score: 0.89, date: '2023-10-27' },
+      { id: 2, summary: 'Analysis of file: report.docx', threat: false, score: 0.12, date: '2023-10-27' },
+      { id: 3, summary: 'Analysis of file: image_04.jpg', threat: true, score: 0.95, date: '2023-10-26' },
+      { id: 4, summary: 'Analysis of text snippet.', threat: false, score: 0.23, date: '2023-10-25' },
+    ];
+  
     return (
-      <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 h-full flex justify-center items-center backdrop-blur-sm">
-        <div className="text-center">
-          <svg className="animate-spin mx-auto h-10 w-10 text-cyan-400 mb-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <div className="text-cyan-400 text-lg">Analyzing...</div>
+      <div className="w-full max-w-4xl p-6 bg-gray-800 rounded-xl shadow-2xl border border-gray-700 animate-fade-in">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-white flex items-center">
+            <FiClock className="mr-3 text-indigo-400"/>
+            Analysis History
+          </h2>
+          <button
+            onClick={() => setPage('dashboard')}
+            className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-lg hover:bg-indigo-700 transition-all duration-300"
+          >
+            Back to Analyzer
+          </button>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-900/30 border border-red-700 rounded-xl p-6 h-full flex justify-center items-center backdrop-blur-sm">
-        <div className="text-red-400 text-lg font-semibold text-center">
-          <FiAlertTriangle className="mx-auto h-10 w-10 mb-3"/>
-          {error}
-        </div>
-      </div>
-    );
-  }
-
-  if (!result) {
-    return (
-      <div className="bg-gray-800/50 border-2 border-dashed border-gray-700 rounded-xl p-6 h-full flex justify-center items-center backdrop-blur-sm">
-        <div className="text-gray-500 text-lg">Analysis results will appear here</div>
-      </div>
-    );
-  }
-
-  const isThreat = result.is_threat;
-
-  return (
-    <div className={`bg-gray-800/50 border rounded-xl p-6 shadow-2xl backdrop-blur-sm transition-all duration-500 ${isThreat ? 'border-red-500' : 'border-green-500'}`}>
-      <h2 className={`text-2xl font-semibold mb-4 flex items-center ${isThreat ? 'text-red-400' : 'text-green-400'}`}>
-        {isThreat ? <FiAlertTriangle className="mr-3" /> : <FiCheckCircle className="mr-3" />}
-        Analysis Report
-      </h2>
-
-      <div className={`text-xl font-bold p-3 rounded-md mb-6 text-center ${isThreat ? 'bg-red-900/50 text-red-300' : 'bg-green-900/50 text-green-300'}`}>
-        {isThreat ? 'THREAT DETECTED' : 'NO THREAT DETECTED'}
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {Object.entries(result).map(([key, value]) => {
-          if (value === null || key === 'text') return null;
-          
-          const formattedKey = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          let formattedValue = String(value);
-
-          if (typeof value === 'boolean') {
-            formattedValue = value ? 'Yes' : 'No';
-          }
-          if (typeof value === 'number' && key.toLowerCase().includes('score')) {
-            formattedValue = (value * 100).toFixed(2) + '%';
-          }
-
-          return (
-            <div key={key} className="bg-gray-900/70 p-3 rounded-md border border-gray-700/50">
-              <div className="text-sm font-medium text-gray-400">{formattedKey}</div>
-              <div className={`text-lg font-semibold ${isThreat && key === 'is_threat' ? 'text-red-400' : 'text-white'}`}>
-                {formattedValue}
+        <div className="space-y-4">
+          {mockHistory.map((item) => (
+            <div key={item.id} className="p-4 bg-gray-900/70 rounded-lg border border-gray-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between">
+              <div className="flex-1 mb-2 sm:mb-0">
+                <p className="text-sm font-medium text-gray-300">{item.summary}</p>
+                <p className="text-xs text-gray-500 font-mono mt-1">{item.date}</p>
+              </div>
+              <div className={`text-sm font-bold px-3 py-1 rounded-full ${item.threat ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                Score: {(item.score * 100).toFixed(0)}%
               </div>
             </div>
-          );
-        })}
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
 };
 
-//==================================================================
-//  4. Main Page Component: Manages state and layout.
-//==================================================================
-const AnalysisPage = () => {
-  const [isLoading, setIsLoading] = useState(false);
+const Dashboard = () => {
+  const navigate = useNavigate(); // ✅ new hook
+
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   return (
-    <div className="bg-gray-900 text-white min-h-screen p-4 sm:p-6 lg:p-8 font-sans">
-      <div className="max-w-7xl mx-auto">
-        {/* CHANGED: Made header relative to position the button */}
-        <header className="text-center mb-10 relative">
-          <h1 className="text-4xl sm:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-teal-500">
-            Decentralized Threat Intelligence
-          </h1>
-          <p className="text-gray-400 mt-2">
-            AI-powered content analysis on a secure, transparent platform.
-          </p>
+    <>
+      <div className="text-center mb-10 w-full max-w-7xl relative">
+        <h1 className="text-4xl font-extrabold tracking-tight">Decentralized Content Analysis</h1>
+        <p className="text-gray-400 mt-2 max-w-2xl mx-auto">
+          An AI-powered tool for detecting harmful or AI-generated content, with results logged on-chain for transparency.
+        </p>
 
-          {/* ADDED: History button */}
-          <Link
-            to="/history"
-            className="absolute top-0 right-0 mt-1 mr-1 flex items-center gap-2 bg-gray-700/50 hover:bg-gray-700/80 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200"
-          >
-            <FiClock />
-            <span>History</span>
-          </Link>
-
-        </header>
-
-        <main className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Left Column */}
-          <div className="flex flex-col gap-8">
-            <Analyzer 
-              setIsLoading={setIsLoading} 
-              setResult={setResult} 
-              setError={setError} 
-            />
-            <ThreatFeed />
-          </div>
-
-          {/* Right Column */}
-          <div className="lg:sticky top-8 self-start">
-            <Results 
-              isLoading={isLoading} 
-              result={result} 
-              error={error} 
-            />
-          </div>
-        </main>
+        {/* ✅ Updated to use navigate() */}
+        <button
+          onClick={() => navigate('/history')}
+          title="View History"
+          className="absolute top-0 right-0 flex items-center justify-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-gray-700 rounded-lg shadow-md hover:bg-indigo-600 transition-all duration-300"
+        >
+          <FiClock />
+          <span>History</span>
+        </button>
       </div>
-    </div>
+
+      {/* Your analyzer & results layout stays the same */}
+      <div className="flex flex-col lg:flex-row gap-8 w-full max-w-7xl">
+        <div className="flex flex-col items-center w-full lg:w-1/2 space-y-8 flex-shrink-0">
+          <Analyzer
+            isLoading={isLoading}
+            setIsLoading={setIsLoading}
+            setResult={setResult}
+            setError={setError}
+          />
+          <Results
+            isLoading={isLoading}
+            result={result}
+            error={error}
+          />
+        </div>
+        <div className="w-full lg:w-1/2 flex justify-center lg:justify-start mt-8 lg:mt-0">
+          <ThreatFeed />
+        </div>
+      </div>
+    </>
   );
 };
 
-export default AnalysisPage;
+
+
+
+// --- Main App Component (Router) ---
+export default function App() {
+  const [page, setPage] = useState('dashboard');
+
+  const renderPage = () => {
+      switch (page) {
+          case 'history':
+              return <History setPage={setPage} />;
+          case 'dashboard':
+          default:
+              return <Dashboard setPage={setPage} />;
+      }
+  };
+
+  return (
+    <div className="bg-gray-900 min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans text-white">
+      {renderPage()}
+      <style>{`
+        body { background-color: #111827; }
+        .animate-fade-in {
+          animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(10px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
