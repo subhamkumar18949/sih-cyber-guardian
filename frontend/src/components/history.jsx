@@ -64,7 +64,7 @@ function App() {
 
   useEffect(() => {
     // Uncomment the line below to fetch data on component mount
-    // fetchHistoryData();
+  fetchHistoryData();
   }, []);
 
   const filteredData = data.filter((item) => {

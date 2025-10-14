@@ -49,7 +49,7 @@ print("Connected to MongoDB.")
 
 # --- AI MODEL SETUP ---
 print("Loading AI models...")
-ai_gen_detector = pipeline("text-classification", model="./my_custom_ai_detector")
+ai_gen_detector = pipeline("text-classification", model="subham18949/sih-cyber-guardian-detector")
 toxicity_detector = pipeline("text-classification", model="martin-ha/toxic-comment-model")
 sentiment_detector = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
 clip_classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14")

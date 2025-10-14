@@ -41,7 +41,7 @@ const Analyzer = ({ setIsLoading, setResult, setError }) => {
           });
           setResult(response.data);
         } else {
-          const response = await axios.post('http://1.2.3.4:8000/analyze', { text: inputText });
+          const response = await axios.post('http://127.0.0.1:8000/analyze', { text: inputText });
           setResult(response.data);
         }
       }
