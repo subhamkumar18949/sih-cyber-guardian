@@ -16,12 +16,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from datetime import datetime
 from bson import ObjectId
-from fastapi.staticfiles import StaticFiles
 import shutil
 
 # --- SETUP ---
 load_dotenv()
-app = FastAPI(title="Cyber Guardian API - Final")
+app = FastAPI(title="Cyber Guardian API - Memory Optimized")
 
 # Create uploads directory if it doesn't exist
 UPLOADS_DIR = "uploads"
@@ -47,13 +46,40 @@ db = client.cyber_guardian
 threat_collection = db.threat_reports
 print("Connected to MongoDB.")
 
-# --- AI MODEL SETUP ---
-print("Loading AI models...")
-ai_gen_detector = pipeline("text-classification", model="subham18949/sih-cyber-guardian-detector")
-toxicity_detector = pipeline("text-classification", model="martin-ha/toxic-comment-model")
-sentiment_detector = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
-clip_classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14")
-print("All AI Models loaded successfully.")
+# --- AI MODEL SETUP (LAZY LOADING) ---
+# We declare them as None. They will be loaded only when first used.
+ai_gen_detector = None
+toxicity_detector = None
+sentiment_detector = None
+clip_classifier = None
+
+def get_ai_gen_detector():
+    global ai_gen_detector
+    if ai_gen_detector is None:
+        print("Loading custom AI-gen detector for the first time...")
+        ai_gen_detector = pipeline("text-classification", model="your-hf-username/sih-cyber-guardian-detector")
+    return ai_gen_detector
+
+def get_toxicity_detector():
+    global toxicity_detector
+    if toxicity_detector is None:
+        print("Loading toxicity detector for the first time...")
+        toxicity_detector = pipeline("text-classification", model="martin-ha/toxic-comment-model")
+    return toxicity_detector
+    
+def get_sentiment_detector():
+    global sentiment_detector
+    if sentiment_detector is None:
+        print("Loading sentiment detector for the first time...")
+        sentiment_detector = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
+    return sentiment_detector
+
+def get_clip_classifier():
+    global clip_classifier
+    if clip_classifier is None:
+        print("Loading CLIP classifier for the first time...")
+        clip_classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14")
+    return clip_classifier
 
 # --- BLOCKCHAIN SETUP ---
 RPC_URL = os.getenv("RPC_URL")
@@ -119,13 +145,17 @@ async def get_history():
 # --- TEXT ANALYSIS ENDPOINT ---
 @app.post("/analyze", response_model=TextAnalyzeResponse)
 async def analyze_text(request: TextAnalyzeRequest):
-    gen_result = ai_gen_detector(request.text)[0]
+    detector = get_ai_gen_detector()
+    tox_detector = get_toxicity_detector()
+    sent_detector = get_sentiment_detector()
+
+    gen_result = detector(request.text)[0]
     ai_score = gen_result['score'] if gen_result['label'] == 'LABEL_1' else 1 - gen_result['score']
     
-    tox_result = toxicity_detector(request.text)[0]
+    tox_result = tox_detector(request.text)[0]
     tox_score = tox_result['score'] if tox_result['label'] == 'toxic' else 1 - tox_result['score']
     
-    sent_result = sentiment_detector(request.text)[0]
+    sent_result = sent_detector(request.text)[0]
     neg_score = sent_result['score'] if sent_result['label'] == 'negative' else 0.0
 
     is_threat = (ai_score > 0.95) or (tox_score > 0.80) or (neg_score > 0.90)
@@ -152,9 +182,9 @@ async def analyze_text(request: TextAnalyzeRequest):
 # --- IMAGE ANALYSIS ENDPOINT ---
 @app.post("/analyze-image")
 async def analyze_image(file: UploadFile = File(...)):
-    contents = await file.read()
+    classifier = get_clip_classifier()
     
-    # Save the file locally
+    contents = await file.read()
     file_path = os.path.join(UPLOADS_DIR, f"{datetime.utcnow().timestamp()}_{file.filename}")
     with open(file_path, "wb") as f:
         f.write(contents)
@@ -162,7 +192,7 @@ async def analyze_image(file: UploadFile = File(...)):
     image = Image.open(io.BytesIO(contents))
     real_labels = ["a realistic photograph", "a normal photo"]
     ai_labels = ["a digital painting", "CGI render", "surreal art"]
-    results = clip_classifier(image, candidate_labels=real_labels + ai_labels)
+    results = classifier(image, candidate_labels=real_labels + ai_labels)
     ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
     top_prediction = results[0]['label']
     is_threat = ai_score > 0.60
@@ -177,7 +207,7 @@ async def analyze_image(file: UploadFile = File(...)):
             threat_recorded = True
 
     db_document = {
-        "timestamp": datetime.utcnow(), "inputType": "Image", "content": file_path, # Store the path
+        "timestamp": datetime.utcnow(), "inputType": "Image", "content": file_path,
         "content_hash": content_hash,
         "analysis": { "ai_semantic_score": ai_score, "top_prediction": top_prediction, "is_threat": is_threat },
         "blockchain_hash": tx_hash
@@ -189,7 +219,8 @@ async def analyze_image(file: UploadFile = File(...)):
 # --- VIDEO ANALYSIS ENDPOINT ---
 @app.post("/analyze-video")
 async def analyze_video(file: UploadFile = File(...)):
-    # Save the file locally first
+    classifier = get_clip_classifier()
+    
     file_path = os.path.join(UPLOADS_DIR, f"{datetime.utcnow().timestamp()}_{file.filename}")
     contents = await file.read()
     with open(file_path, "wb") as f:
@@ -201,6 +232,7 @@ async def analyze_video(file: UploadFile = File(...)):
     frame_scores = []
     real_labels = ["a realistic photograph", "a normal photo"]
     ai_labels = ["a digital painting", "CGI render", "surreal art"]
+    
     while vidcap.isOpened():
         frame_id = int(vidcap.get(cv2.CAP_PROP_POS_FRAMES))
         success, frame = vidcap.read()
@@ -209,7 +241,7 @@ async def analyze_video(file: UploadFile = File(...)):
             frames_analyzed += 1
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(frame_rgb)
-            results = clip_classifier(pil_image, candidate_labels=real_labels + ai_labels)
+            results = classifier(pil_image, candidate_labels=real_labels + ai_labels)
             ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
             frame_scores.append(ai_score)
             if ai_score > 0.60:
@@ -229,7 +261,7 @@ async def analyze_video(file: UploadFile = File(...)):
             threat_recorded = True
 
     db_document = {
-        "timestamp": datetime.utcnow(), "inputType": "Video", "content": file_path, # Store the path
+        "timestamp": datetime.utcnow(), "inputType": "Video", "content": file_path,
         "content_hash": content_hash,
         "analysis": { "average_ai_score": avg_ai_score, "high_risk_frames_detected": high_risk_frames, "is_threat": is_threat },
         "blockchain_hash": tx_hash
