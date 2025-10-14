@@ -13,7 +13,7 @@ function App() {
     // src/App.js
 
     <Routes>
-      <Route path="/" element={<AnalysisPage />} />
+      <Route path="/analysis" element={<AnalysisPage />} />
       <Route path="/history" element={<HistoryPage />} />
       <Route path="/features" element={<Features />} />
      {/* <Route path="/feed" element={<Dash />} /> */}

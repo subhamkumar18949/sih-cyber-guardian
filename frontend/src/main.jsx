@@ -24,7 +24,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
      <ParticlesComponent />
       <Routes>
         <Route path="/*" element={<MainLayout />} />
-        <Route path="/auth" element={<AuthPage />} />
+        <Route path="/" element={<AuthPage />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
