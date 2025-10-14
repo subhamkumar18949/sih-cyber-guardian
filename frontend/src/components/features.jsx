@@ -92,7 +92,7 @@ const Features = () => {
            </p>
            {/* ✅ Updated to an <a> tag linking to the root path */}
            <a
-             href="/"
+             href="/analysis"
              className="inline-block bg-gradient-to-r from-sky-800 to-sky-900 text-white font-semibold py-3 px-8 rounded-lg shadow-lg hover:scale-105 transform transition-transform duration-300"
            >
              Go to Analyzer

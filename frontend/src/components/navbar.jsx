@@ -27,7 +27,7 @@ const Navbar = () => {
       <nav className="bg-sky-950/50 backdrop-blur-md p-4 rounded-full w-full max-w-4xl border border-blue-400/20 shadow-lg">
         <ul className="flex items-center justify-center space-x-3 md:space-x-4">
           <li>
-            <NavLink to="/" className={getNavLinkClass}>
+            <NavLink to="/analysis" className={getNavLinkClass}>
               Dashboard
             </NavLink>
           </li>
@@ -47,8 +47,8 @@ const Navbar = () => {
             </NavLink>
           </li> */}
           <li>
-            <NavLink to="/auth" className={getNavLinkClass}>
-              Login/Signup
+            <NavLink to="/" className={getNavLinkClass}>
+              Logout
             </NavLink>
           </li>
         </ul>
