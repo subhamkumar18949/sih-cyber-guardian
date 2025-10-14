@@ -8,7 +8,7 @@ const Analyzer = ({ setIsLoading, setResult, setError }) => {
   const [isLocalLoading, setLocalLoading] = useState(false);
 
   // Enable this to mock backend responses
-  const mockMode = true;
+  const mockMode = false;
 
   const handleAnalyze = async () => {
     setLocalLoading(true);

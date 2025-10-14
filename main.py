@@ -1,29 +1,47 @@
-from fastapi import FastAPI
+print("--- RUNNING THE LATEST AND CORRECT main.py FILE ---")
+from fastapi import FastAPI, File, UploadFile
 from pydantic import BaseModel
 from web3 import Web3
 import json
 import os
+import tempfile
 from dotenv import load_dotenv
 from transformers import pipeline
 import hashlib
+from PIL import Image
+import io
+import cv2
+import numpy as np
+import networkx as nx
+from fastapi.middleware.cors import CORSMiddleware
 
 # --- SETUP ---
 load_dotenv()
-app = FastAPI(title="Cyber Guardian API - Threat Scoring Engine")
+app = FastAPI(title="Cyber Guardian API - Final")
+
+# --- CORS MIDDLEWARE (The Fix) ---
+# This allows your frontend to talk to your backend
+origins = [
+    "http://localhost:5173", # Default Vite port
+    "http://localhost:3000", # Default Create React App port
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+# ------------------------------------
 
 # --- AI MODEL SETUP ---
 print("Loading AI models...")
-# Model 1: AI-Generation Detector
-ai_gen_detector = pipeline("text-classification", model="Hello-SimpleAI/chatgpt-detector-roberta")
-
-# Model 2: Toxicity Detector
+ai_gen_detector = pipeline("text-classification", model="./my_custom_ai_detector")
 toxicity_detector = pipeline("text-classification", model="martin-ha/toxic-comment-model")
+clip_classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14")
+print("All AI Models loaded successfully.")
 
-# Model 3: Sentiment Detector
-sentiment_detector = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
-print("AI Models loaded successfully.")
-
-# --- BLOCKCHAIN SETUP (remains the same) ---
+# --- BLOCKCHAIN SETUP ---
 RPC_URL = os.getenv("RPC_URL")
 PRIVATE_KEY = os.getenv("PRIVATE_KEY")
 WALLET_ADDRESS = os.getenv("WALLET_ADDRESS")
@@ -41,67 +59,130 @@ except Exception as e:
     print(f"Error loading contract ABI: {e}. Blockchain features will be disabled.")
     contract = None
 
+# --- Reusable Blockchain Function with Gas Estimation ---
+def log_threat_to_blockchain(content_hash: str):
+    if not contract: return None
+    try:
+        print(f"High-risk threat detected! Logging hash to blockchain...")
+        gas_estimate = contract.functions.createAlert(content_hash).estimate_gas({'from': WALLET_ADDRESS})
+        nonce = w3.eth.get_transaction_count(WALLET_ADDRESS)
+        tx = contract.functions.createAlert(content_hash).build_transaction({
+            'chainId': 11155111, 'gas': gas_estimate, 'gasPrice': w3.eth.gas_price,
+            'from': WALLET_ADDRESS, 'nonce': nonce
+        })
+        signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
+        sent_tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        tx_hash = sent_tx_hash.hex()
+        print(f"Transaction sent successfully! Hash: {tx_hash}")
+        return tx_hash
+    except Exception as e:
+        print(f"Error logging to blockchain: {e}")
+        return None
+
 # --- API MODELS ---
-class AnalyzeRequest(BaseModel):
+class TextAnalyzeRequest(BaseModel):
     text: str
 
-class AnalyzeResponse(BaseModel):
+class TextAnalyzeResponse(BaseModel):
     text: str
     ai_generated_score: float
     toxicity_score: float
-    negative_sentiment_score: float
-    final_risk_score: float
     is_threat: bool
     threat_recorded: bool
+    content_hash: str | None = None
     transaction_hash: str | None = None
 
-# --- API ENDPOINT ---
-@app.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_text(request: AnalyzeRequest):
-    # 1. Get AI-Generation Score
-    gen_result = ai_gen_detector(request.text)[0]
-    ai_score = gen_result['score'] if gen_result['label'] in ['ChatGPT', 'LABEL_1', 'Fake'] else 1 - gen_result['score']
+# --- GRAPH ENDPOINT ---
+@app.get("/threat-graph/{content_hash}")
+async def get_threat_graph(content_hash: str):
+    G = nx.DiGraph()
+    source_node = f"Source ({content_hash[:8]}...)"
+    G.add_node(source_node, type="source")
+    for i in range(np.random.randint(2, 5)):
+        influencer_node = f"Influencer_{i+1}"
+        G.add_node(influencer_node, type="influencer")
+        G.add_edge(source_node, influencer_node)
+        for j in range(np.random.randint(5, 15)):
+            user_node = f"User_{i*15 + j}"
+            G.add_node(user_node, type="user")
+            G.add_edge(influencer_node, user_node)
+    return nx.node_link_data(G)
 
-    # 2. Get Toxicity Score
+# --- TEXT ANALYSIS ENDPOINT ---
+@app.post("/analyze", response_model=TextAnalyzeResponse)
+async def analyze_text(request: TextAnalyzeRequest):
+    gen_result = ai_gen_detector(request.text)[0]
+    ai_score = gen_result['score'] if gen_result['label'] == 'LABEL_1' else 1 - gen_result['score']
     tox_result = toxicity_detector(request.text)[0]
     tox_score = tox_result['score'] if tox_result['label'] == 'toxic' else 1 - tox_result['score']
-
-    # 3. Get Negative Sentiment Score
-    sent_result = sentiment_detector(request.text)[0]
-    neg_score = sent_result['score'] if sent_result['label'] == 'negative' else 0.0
-
-    # 4. Calculate Final Risk Score (weighted average)
-    final_risk_score = (ai_score * 0.2) + (tox_score * 0.5) + (neg_score * 0.3)
-    is_threat = final_risk_score > 0.70 # Set a high-risk threshold
-
+    is_threat = (ai_score > 0.95) or (tox_score > 0.80)
     threat_recorded = False
     tx_hash = None
-
-    # 5. If it's a high-risk threat, log it to the blockchain
-    if is_threat and contract is not None:
+    content_hash = None
+    if is_threat:
         content_hash = hashlib.sha256(request.text.encode()).hexdigest()
-        try:
-            print(f"High-risk threat detected! Logging hash to blockchain...")
-            nonce = w3.eth.get_transaction_count(WALLET_ADDRESS)
-            tx = contract.functions.createAlert(content_hash).build_transaction({
-                'chainId': 11155111, 'gas': 150000, 'gasPrice': w3.eth.gas_price,
-                'from': WALLET_ADDRESS, 'nonce': nonce
-            })
-            signed_tx = w3.eth.account.sign_transaction(tx, private_key=PRIVATE_KEY)
-            sent_tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
-            tx_hash = sent_tx_hash.hex()
+        tx_hash = log_threat_to_blockchain(content_hash)
+        if tx_hash:
             threat_recorded = True
-            print(f"Transaction sent successfully! Hash: {tx_hash}")
-        except Exception as e:
-            print(f"Error logging to blockchain: {e}")
+    return TextAnalyzeResponse(text=request.text, ai_generated_score=ai_score, toxicity_score=tox_score, is_threat=is_threat, threat_recorded=threat_recorded, content_hash=content_hash, transaction_hash=tx_hash)
 
-    return AnalyzeResponse(
-        text=request.text,
-        ai_generated_score=ai_score,
-        toxicity_score=tox_score,
-        negative_sentiment_score=neg_score,
-        final_risk_score=final_risk_score,
-        is_threat=is_threat,
-        threat_recorded=threat_recorded,
-        transaction_hash=tx_hash
-    )
+# --- IMAGE ANALYSIS ENDPOINT ---
+@app.post("/analyze-image")
+async def analyze_image(file: UploadFile = File(...)):
+    contents = await file.read()
+    image = Image.open(io.BytesIO(contents))
+    real_labels = ["a realistic photograph", "a normal photo", "real life"]
+    ai_labels = ["a digital painting", "CGI render", "surreal art", "unrealistic"]
+    results = clip_classifier(image, candidate_labels=real_labels + ai_labels)
+    ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
+    top_prediction = results[0]['label']
+    is_threat = ai_score > 0.60
+    threat_recorded = False
+    tx_hash = None
+    content_hash = None
+    if is_threat:
+        content_hash = hashlib.sha256(contents).hexdigest()
+        tx_hash = log_threat_to_blockchain(content_hash)
+        if tx_hash:
+            threat_recorded = True
+    return { "filename": file.filename, "ai_semantic_score": ai_score, "top_prediction": top_prediction, "is_threat": is_threat, "threat_recorded": threat_recorded, "content_hash": content_hash, "transaction_hash": tx_hash }
+
+# --- VIDEO ANALYSIS ENDPOINT ---
+@app.post("/analyze-video")
+async def analyze_video(file: UploadFile = File(...)):
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        contents = await file.read()
+        tmp.write(contents)
+        video_path = tmp.name
+    vidcap = cv2.VideoCapture(video_path)
+    fps = vidcap.get(cv2.CAP_PROP_FPS)
+    frames_analyzed, high_risk_frames = 0, 0
+    frame_scores = []
+    real_labels = ["a realistic photograph", "a normal photo", "real life"]
+    ai_labels = ["a digital painting", "CGI render", "surreal art", "unrealistic"]
+    while vidcap.isOpened():
+        frame_id = int(vidcap.get(cv2.CAP_PROP_POS_FRAMES))
+        success, frame = vidcap.read()
+        if not success: break
+        if frame_id % int(fps or 30) == 0:
+            frames_analyzed += 1
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(frame_rgb)
+            results = clip_classifier(pil_image, candidate_labels=real_labels + ai_labels)
+            ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
+            frame_scores.append(ai_score)
+            if ai_score > 0.60:
+                high_risk_frames += 1
+    vidcap.release()
+    os.remove(video_path)
+    avg_ai_score = sum(frame_scores) / len(frame_scores) if frame_scores else 0
+    is_threat = (high_risk_frames / frames_analyzed) > 0.50 if frames_analyzed > 0 else False
+    threat_recorded = False
+    tx_hash = None
+    content_hash = None
+    if is_threat:
+        content_hash = hashlib.sha256(contents).hexdigest()
+        tx_hash = log_threat_to_blockchain(content_hash)
+        if tx_hash:
+            threat_recorded = True
+    return { "filename": file.filename, "frames_analyzed": frames_analyzed, "high_risk_frames_detected": high_risk_frames, "average_ai_score": avg_ai_score, "is_threat": is_threat, "threat_recorded": threat_recorded, "content_hash": content_hash, "transaction_hash": tx_hash }

@@ -11,15 +11,47 @@ from PIL import Image
 import io
 import cv2
 import numpy as np
+import networkx as nx
+from fastapi.middleware.cors import CORSMiddleware
+from pymongo import MongoClient
+from datetime import datetime
+from bson import ObjectId
+from fastapi.staticfiles import StaticFiles
+import shutil
 
 # --- SETUP ---
 load_dotenv()
 app = FastAPI(title="Cyber Guardian API - Final")
 
+# Create uploads directory if it doesn't exist
+UPLOADS_DIR = "uploads"
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
+# Mount the 'uploads' directory to serve static files
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
+# --- CORS MIDDLEWARE ---
+origins = ["http://localhost:5173", "http://localhost:3000"]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- DATABASE SETUP ---
+MONGO_URI = os.getenv("MONGO_URI")
+client = MongoClient(MONGO_URI)
+db = client.cyber_guardian
+threat_collection = db.threat_reports
+print("Connected to MongoDB.")
+
 # --- AI MODEL SETUP ---
 print("Loading AI models...")
 ai_gen_detector = pipeline("text-classification", model="./my_custom_ai_detector")
 toxicity_detector = pipeline("text-classification", model="martin-ha/toxic-comment-model")
+sentiment_detector = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
 clip_classifier = pipeline("zero-shot-image-classification", model="openai/clip-vit-large-patch14")
 print("All AI Models loaded successfully.")
 
@@ -41,8 +73,9 @@ except Exception as e:
     print(f"Error loading contract ABI: {e}. Blockchain features will be disabled.")
     contract = None
 
-# --- Reusable Blockchain Function with Gas Estimation ---
+# --- Reusable Blockchain Function ---
 def log_threat_to_blockchain(content_hash: str):
+    if not contract: return None
     try:
         print(f"High-risk threat detected! Logging hash to blockchain...")
         gas_estimate = contract.functions.createAlert(content_hash).estimate_gas({'from': WALLET_ADDRESS})
@@ -68,9 +101,20 @@ class TextAnalyzeResponse(BaseModel):
     text: str
     ai_generated_score: float
     toxicity_score: float
+    negative_sentiment_score: float
     is_threat: bool
     threat_recorded: bool
+    content_hash: str | None = None
     transaction_hash: str | None = None
+
+# --- HISTORY ENDPOINT ---
+@app.get("/history")
+async def get_history():
+    reports = []
+    for report in threat_collection.find({}).sort("timestamp", -1):
+        report["_id"] = str(report["_id"])
+        reports.append(report)
+    return reports
 
 # --- TEXT ANALYSIS ENDPOINT ---
 @app.post("/analyze", response_model=TextAnalyzeResponse)
@@ -81,91 +125,115 @@ async def analyze_text(request: TextAnalyzeRequest):
     tox_result = toxicity_detector(request.text)[0]
     tox_score = tox_result['score'] if tox_result['label'] == 'toxic' else 1 - tox_result['score']
     
-    is_threat = (ai_score > 0.95) or (tox_score > 0.80)
+    sent_result = sentiment_detector(request.text)[0]
+    neg_score = sent_result['score'] if sent_result['label'] == 'negative' else 0.0
+
+    is_threat = (ai_score > 0.95) or (tox_score > 0.80) or (neg_score > 0.90)
+
     threat_recorded = False
     tx_hash = None
+    content_hash = hashlib.sha256(request.text.encode()).hexdigest()
     
-    if is_threat and contract is not None:
-        content_hash = hashlib.sha256(request.text.encode()).hexdigest()
+    if is_threat:
         tx_hash = log_threat_to_blockchain(content_hash)
         if tx_hash:
             threat_recorded = True
+            
+    db_document = {
+        "timestamp": datetime.utcnow(), "inputType": "Text", "content": request.text,
+        "content_hash": content_hash,
+        "analysis": { "ai_generated_score": ai_score, "toxicity_score": tox_score, "negative_sentiment_score": neg_score, "is_threat": is_threat },
+        "blockchain_hash": tx_hash
+    }
+    threat_collection.insert_one(db_document)
 
-    return TextAnalyzeResponse(text=request.text, ai_generated_score=ai_score, toxicity_score=tox_score, is_threat=is_threat, threat_recorded=threat_recorded, transaction_hash=tx_hash)
+    return TextAnalyzeResponse(text=request.text, ai_generated_score=ai_score, toxicity_score=tox_score, negative_sentiment_score=neg_score, is_threat=is_threat, threat_recorded=threat_recorded, content_hash=content_hash, transaction_hash=tx_hash)
 
 # --- IMAGE ANALYSIS ENDPOINT ---
 @app.post("/analyze-image")
 async def analyze_image(file: UploadFile = File(...)):
     contents = await file.read()
+    
+    # Save the file locally
+    file_path = os.path.join(UPLOADS_DIR, f"{datetime.utcnow().timestamp()}_{file.filename}")
+    with open(file_path, "wb") as f:
+        f.write(contents)
+    
     image = Image.open(io.BytesIO(contents))
-    
-    real_labels = ["a realistic photograph", "a normal photo", "real life"]
-    ai_labels = ["a digital painting", "CGI render", "surreal art", "unrealistic"]
+    real_labels = ["a realistic photograph", "a normal photo"]
+    ai_labels = ["a digital painting", "CGI render", "surreal art"]
     results = clip_classifier(image, candidate_labels=real_labels + ai_labels)
-    
     ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
     top_prediction = results[0]['label']
     is_threat = ai_score > 0.60
     
     threat_recorded = False
     tx_hash = None
-    if is_threat and contract is not None:
-        content_hash = hashlib.sha256(contents).hexdigest()
+    content_hash = hashlib.sha256(contents).hexdigest()
+    
+    if is_threat:
         tx_hash = log_threat_to_blockchain(content_hash)
         if tx_hash:
             threat_recorded = True
 
-    return { "filename": file.filename, "ai_semantic_score": ai_score, "top_prediction": top_prediction, "is_threat": is_threat, "threat_recorded": threat_recorded, "transaction_hash": tx_hash }
+    db_document = {
+        "timestamp": datetime.utcnow(), "inputType": "Image", "content": file_path, # Store the path
+        "content_hash": content_hash,
+        "analysis": { "ai_semantic_score": ai_score, "top_prediction": top_prediction, "is_threat": is_threat },
+        "blockchain_hash": tx_hash
+    }
+    threat_collection.insert_one(db_document)
+
+    return { "filename": file.filename, "ai_semantic_score": ai_score, "top_prediction": top_prediction, "is_threat": is_threat, "threat_recorded": threat_recorded, "content_hash": content_hash, "transaction_hash": tx_hash }
 
 # --- VIDEO ANALYSIS ENDPOINT ---
 @app.post("/analyze-video")
 async def analyze_video(file: UploadFile = File(...)):
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        contents = await file.read()
-        tmp.write(contents)
-        video_path = tmp.name
+    # Save the file locally first
+    file_path = os.path.join(UPLOADS_DIR, f"{datetime.utcnow().timestamp()}_{file.filename}")
+    contents = await file.read()
+    with open(file_path, "wb") as f:
+        f.write(contents)
 
-    vidcap = cv2.VideoCapture(video_path)
+    vidcap = cv2.VideoCapture(file_path)
     fps = vidcap.get(cv2.CAP_PROP_FPS)
     frames_analyzed, high_risk_frames = 0, 0
     frame_scores = []
-    
-    real_labels = ["a realistic photograph", "a normal photo", "real life"]
-    ai_labels = ["a digital painting", "CGI render", "surreal art", "unrealistic"]
-
+    real_labels = ["a realistic photograph", "a normal photo"]
+    ai_labels = ["a digital painting", "CGI render", "surreal art"]
     while vidcap.isOpened():
         frame_id = int(vidcap.get(cv2.CAP_PROP_POS_FRAMES))
         success, frame = vidcap.read()
         if not success: break
-            
         if frame_id % int(fps or 30) == 0:
             frames_analyzed += 1
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pil_image = Image.fromarray(frame_rgb)
-            
-            with io.BytesIO() as buf:
-                pil_image.save(buf, format='JPEG')
-                image_bytes = buf.getvalue()
-
             results = clip_classifier(pil_image, candidate_labels=real_labels + ai_labels)
             ai_score = sum(res['score'] for res in results if res['label'] in ai_labels)
             frame_scores.append(ai_score)
-            
             if ai_score > 0.60:
                 high_risk_frames += 1
-    
     vidcap.release()
-    os.remove(video_path)
-
+    
     avg_ai_score = sum(frame_scores) / len(frame_scores) if frame_scores else 0
     is_threat = (high_risk_frames / frames_analyzed) > 0.50 if frames_analyzed > 0 else False
     
     threat_recorded = False
     tx_hash = None
-    if is_threat and contract is not None:
-        content_hash = hashlib.sha256(contents).hexdigest()
+    content_hash = hashlib.sha256(contents).hexdigest()
+    
+    if is_threat:
         tx_hash = log_threat_to_blockchain(content_hash)
         if tx_hash:
             threat_recorded = True
 
-    return { "filename": file.filename, "frames_analyzed": frames_analyzed, "high_risk_frames_detected": high_risk_frames, "average_ai_score": avg_ai_score, "is_threat": is_threat, "threat_recorded": threat_recorded, "transaction_hash": tx_hash }
+    db_document = {
+        "timestamp": datetime.utcnow(), "inputType": "Video", "content": file_path, # Store the path
+        "content_hash": content_hash,
+        "analysis": { "average_ai_score": avg_ai_score, "high_risk_frames_detected": high_risk_frames, "is_threat": is_threat },
+        "blockchain_hash": tx_hash
+    }
+    threat_collection.insert_one(db_document)
+
+    return { "filename": file.filename, "frames_analyzed": frames_analyzed, "high_risk_frames_detected": high_risk_frames, "average_ai_score": avg_ai_score, "is_threat": is_threat, "threat_recorded": threat_recorded, "content_hash": content_hash, "transaction_hash": tx_hash }
