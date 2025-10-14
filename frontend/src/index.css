@@ -1,4 +1,4 @@
-/* Parent Container Styles */
+@import "tailwindcss";
 .dashboard-container {
   background-color: #111827;
   color: #e5e7eb;

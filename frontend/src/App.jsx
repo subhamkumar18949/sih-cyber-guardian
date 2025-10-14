@@ -16,8 +16,8 @@ function App() {
       Cyber Guardian 🛡️
     </h1>
   <div className='p'><div><p className="dashboard-subtitle">AI-Powered Malign Information Operations Dashboard</p></div> 
-    <div> <Link to="/component/page1">
-      <button>page1</button>
+    <div> <Link to="/component/history">
+      <button>History</button>
     </Link>
   </div></div></header>
 
