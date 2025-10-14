@@ -216,7 +216,14 @@ function App() {
                     )}
                     <div>
                       <p className="text-cyan-400 font-semibold">
-                        {item.inputType === "Text" ? "📝 Text Content" : "🖼️ Image Content"}
+                       {item.inputType === "Text" 
+             ? "📝 Text Content" 
+              : item.inputType === "Image" 
+             ? "🖼️ Image Content" 
+             : item.inputType === "Video"
+                 ? "🎥 Video Content"
+                 : "❓ Unknown Content"}
+
                       </p>
                       <p className="text-xs text-cyan-200">
                         {new Date(item.timestamp).toLocaleString()}
