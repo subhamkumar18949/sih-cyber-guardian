@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from web3 import Web3
 import json
