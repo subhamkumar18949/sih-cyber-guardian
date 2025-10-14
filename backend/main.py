@@ -58,7 +58,7 @@ def get_ai_gen_detector():
     global ai_gen_detector
     if ai_gen_detector is None:
         print("Loading custom AI-gen detector for the first time...")
-        ai_gen_detector = pipeline("text-classification", model="your-hf-username/sih-cyber-guardian-detector")
+        ai_gen_detector = pipeline("text-classification", model="subham18949/sih-cyber-guardian-detector")
     return ai_gen_detector
 
 def get_toxicity_detector():
