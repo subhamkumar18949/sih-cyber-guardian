@@ -3,6 +3,7 @@ import Analyzer from './components/Analyzer';
 import Results from './components/Results';
 import ThreatFeed from './components/ThreatFeed';
 import './index.css'
+import { Link } from 'react-router-dom'
 function App() {
   const [result, setResult] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -14,8 +15,12 @@ function App() {
     <h1 className="dashboard-title">
       Cyber Guardian 🛡️
     </h1>
-    <p className="dashboard-subtitle">AI-Powered Malign Information Operations Dashboard</p>
-  </header>
+  <div className='p'><div><p className="dashboard-subtitle">AI-Powered Malign Information Operations Dashboard</p></div> 
+    <div> <Link to="/component/page1">
+      <button>page1</button>
+    </Link>
+  </div></div></header>
+
 
   <div className="dashboard-grid">
     <div className="dashboard-analyzer">
