@@ -6,11 +6,13 @@ const AuthPage = () => {
   const navigate = useNavigate();
 
   // Handles form submit (Login/Sign Up)
-  const handleSubmit = (e) => {
-    e.preventDefault(); // Prevents page reload
-    setTimeout(500);
-    navigate('/analysis'); // Navigate after successful login/signup
-  };
+ const handleSubmit = (e) => {
+  e.preventDefault(); // stop page reload
+
+  setTimeout(() => {
+    navigate('/analysis');
+  }, 1500); // delay of 1.5 seconds
+};
 
   // Toggles between Login and Sign Up forms
   const toggleForm = () => {
