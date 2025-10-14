@@ -45,7 +45,7 @@ function App() {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch("/history");
+      const response = await fetch("http://127.0.0.1:8000/history");
       if (!response.ok) {
         throw new Error(`API error: ${response.status}`);
       }
