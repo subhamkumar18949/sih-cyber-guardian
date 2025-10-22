@@ -20,7 +20,6 @@ const Analyzer = ({ isLoading, setResult, setError, setIsLoading }) => {
     const [file, setFile] = useState(null);
     const [activeTab, setActiveTab] = useState('text');
     const [isDragOver, setIsDragOver] = useState(false);
-    const mockMode = false; // <-- SET TO false TO SIMULATE API CALLS
 
     const resetState = () => {
         setResult(null);
@@ -40,49 +39,31 @@ const Analyzer = ({ isLoading, setResult, setError, setIsLoading }) => {
         setFile(null);
     };
 
+    // --- THIS IS THE FIXED FUNCTION ---
     const handleAnalyze = async () => {
-        setIsLoading(true);
+        setIsLoading(true); // FIX: Use the prop passed from the parent
         setResult(null);
         setError('');
     
         try {
-            if (mockMode) {
-                // --- MOCK MODE: Simulate the detailed backend response ---
-                await new Promise(res => setTimeout(res, 1500));
-                const isThreat = Math.random() > 0.5;
-                setResult({
-                    _id: "mock_" + [...Array(10)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
-                    timestamp: new Date().toISOString(),
-                    inputType: file ? 'File' : 'Text',
-                    content: file ? file.name : `${inputText.substring(0, 80)}${inputText.length > 80 ? '...' : ''}`,
-                    content_hash: [...Array(10)].map(() => Math.floor(Math.random() * 16).toString(16)).join('') + '...',
-                    analysis: {
-                        is_threat: isThreat,
-                        ai_generated_score: Math.random() * 0.4,
-                        toxicity_score: isThreat ? (0.7 + Math.random() * 0.3) : (Math.random() * 0.3),
-                    },
-                    blockchain_hash: "0x" + [...Array(12)].map(() => Math.floor(Math.random() * 16).toString(16)).join(''),
+            // FIX: The mockMode and intentional error logic is removed.
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                const endpoint = file.type.startsWith('video/') ? '/analyze-video' : '/analyze-image';
+                const response = await axios.post(`http://127.0.0.1:8000${endpoint}`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }, // FIX: Add required headers for file upload
                 });
+                setResult(response.data);
             } else {
-                 // --- LIVE MODE: Attempt to make an API call ---
-                // NOTE: This part will throw an error for the demo as the backend is not connected.
-                if (file) {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    const endpoint = file.type.startsWith('video/') ? '/analyze-video' : '/analyze-image';
-                     const response = await axios.post(`http://127.0.0.1:8000${endpoint}`, formData);
-                     setResult(response.data);
-                    throw new Error("Backend not connected.");
-                } else {
-                     const response = await axios.post('http://127.0.0.1:8000/analyze', { text: inputText });
-                     setResult(response.data);
-                    throw new Error("Backend not connected.");
-                }
+                const response = await axios.post('http://127.0.0.1:8000/analyze', { text: inputText });
+                setResult(response.data);
             }
         } catch (err) {
+            console.error("API Error:", err);
             setError(err.message || "Analysis failed. Please check if the backend server is running.");
         } finally {
-            setIsLoading(false);
+            setIsLoading(false); // FIX: Use the prop passed from the parent
         }
     };
     
@@ -165,17 +146,33 @@ const Results = ({ isLoading, result, error }) => {
         );
     }
 
-    const { analysis, ...meta } = result;
-    const isThreat = analysis.is_threat;
+    // --- THIS IS THE FIXED PART ---
+    const isThreat = result.is_threat; // <-- FIX: Read directly from result
 
     const statusBg = isThreat ? 'bg-red-500/10' : 'bg-green-500/10';
     const statusText = isThreat ? 'text-red-400' : 'text-green-400';
     const statusBorder = isThreat ? 'border-red-500/50' : 'border-green-500/50';
     const statusGlow = isThreat ? 'shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'shadow-[0_0_15px_rgba(34,197,94,0.3)]';
     
-    const formatTimestamp = (isoString) => new Date(isoString).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    // FIX: Manually create the scores and metadata objects from the flat result
+    const analysisScores = {
+        ai_generated_score: result.ai_generated_score,
+        toxicity_score: result.toxicity_score,
+        negative_sentiment_score: result.negative_sentiment_score,
+        ai_semantic_score: result.ai_semantic_score,
+        average_ai_score: result.average_ai_score,
+    };
+
+    const metaData = {
+        content_hash: result.content_hash,
+        transaction_hash: result.transaction_hash,
+        filename: result.filename,
+    };
+
+    const formatTimestamp = (isoString) => new Date(isoString).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
     const DataRow = ({ label, value }) => {
+        if (value === null || value === undefined) return null; // Don't render if value is missing
         const isLong = typeof value === 'string' && value.length > 25;
         return (
             <div className={`p-3 bg-sky-900/30 rounded-lg border border-sky-700/30 flex justify-between ${isLong ? 'flex-col items-start' : 'items-center'}`}>
@@ -186,6 +183,7 @@ const Results = ({ isLoading, result, error }) => {
     };
 
     const ScoreBar = ({ label, score }) => {
+        if (score === null || score === undefined) return null; // Don't render if score is missing
         const percentage = (score * 100).toFixed(1);
         let barColor = "bg-green-500";
         if (score > 0.7) barColor = "bg-red-500";
@@ -211,15 +209,14 @@ const Results = ({ isLoading, result, error }) => {
             </div>
             <div className="space-y-3 text-sm">
                 <h3 className="text-sky-300 font-semibold border-b border-sky-800 pb-2">Analysis Scores</h3>
-                {Object.entries(analysis).filter(([key]) => key !== 'is_threat').map(([key, value]) => <ScoreBar key={key} label={key} score={value} />)}
+                {Object.entries(analysisScores).map(([key, value]) => <ScoreBar key={key} label={key} score={value} />)}
                 
                 <h3 className="text-sky-300 font-semibold border-b border-sky-800 pb-2 pt-4">Metadata</h3>
-                {Object.entries(meta).map(([key, value]) => <DataRow key={key} label={key} value={key === 'timestamp' ? formatTimestamp(value) : value} />)}
+                {Object.entries(metaData).map(([key, value]) => <DataRow key={key} label={key} value={value} />)}
             </div>
         </div>
     );
 };
-
 
 // --- COMPONENT 3: ThreatFeed ---
 const ThreatFeed = () => {
@@ -261,23 +258,23 @@ const HistoryPage = ({ setPage }) => {
         { id: 3, summary: 'Analysis of file: image_04.jpg', threat: true, score: 0.95, date: '2025-10-13' },
     ];
     return (
-      <div className="w-full max-w-4xl p-6 bg-sky-800/40 rounded-xl shadow-2xl border border-gray-700 animate-fade-in">
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-white flex items-center"><FiClock className="mr-3 text-indigo-400"/>Analysis History</h2>
-          <button onClick={() => setPage('dashboard')} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-lg hover:bg-indigo-700 transition-all duration-300">Back to Analyzer</button>
-        </div>
-        <div className="space-y-4">
-          {mockHistory.map((item) => (
-            <div key={item.id} className="p-4 bg-gray-900/70 rounded-lg border border-gray-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between">
-              <div className="flex-1 mb-2 sm:mb-0">
-                <p className="text-sm font-medium text-gray-300">{item.summary}</p>
-                <p className="text-xs text-gray-500 font-mono mt-1">{item.date}</p>
-              </div>
-              <div className={`text-sm font-bold px-3 py-1 rounded-full ${item.threat ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>Score: {(item.score * 100).toFixed(0)}%</div>
+        <div className="w-full max-w-4xl p-6 bg-sky-800/40 rounded-xl shadow-2xl border border-gray-700 animate-fade-in">
+            <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-white flex items-center"><FiClock className="mr-3 text-indigo-400"/>Analysis History</h2>
+                <button onClick={() => setPage('dashboard')} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg shadow-lg hover:bg-indigo-700 transition-all duration-300">Back to Analyzer</button>
             </div>
-          ))}
+            <div className="space-y-4">
+                {mockHistory.map((item) => (
+                    <div key={item.id} className="p-4 bg-gray-900/70 rounded-lg border border-gray-700/50 flex flex-col sm:flex-row items-start sm:items-center justify-between">
+                        <div className="flex-1 mb-2 sm:mb-0">
+                            <p className="text-sm font-medium text-gray-300">{item.summary}</p>
+                            <p className="text-xs text-gray-500 font-mono mt-1">{item.date}</p>
+                        </div>
+                        <div className={`text-sm font-bold px-3 py-1 rounded-full ${item.threat ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>Score: {(item.score * 100).toFixed(0)}%</div>
+                    </div>
+                ))}
+            </div>
         </div>
-      </div>
     );
 };
 
@@ -295,7 +292,7 @@ const DashboardView = ({ setPage, handleLogout }) => {
                         <button onClick={() => setPage('history')} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-sky-600/50 rounded-lg shadow-lg hover:bg-sky-700/50 transition-all duration-300">
                             <FiClock/> View History
                         </button>
-                         <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-red-600/50 rounded-lg shadow-lg hover:bg-red-700/50 transition-all duration-300">
+                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-red-600/50 rounded-lg shadow-lg hover:bg-red-700/50 transition-all duration-300">
                             <FiLogOut/> Log Out
                         </button>
                     </div>
@@ -331,7 +328,7 @@ export default function App() {
     const handleLogout = () => {
       setTimeout(1000);
         setIsLoggedOut(true);
-         window.location.href = '/';
+        window.location.href = '/';
     };
 
     const renderContent = () => {
@@ -360,4 +357,3 @@ export default function App() {
         </main>
     );
 }
-
