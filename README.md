@@ -1,57 +1,121 @@
-# Sample Hardhat 3 Beta Project (`mocha` and `ethers`)
+# Cyber Guardian 🛡️ - SIH 2025 (PS ID: 25161)
 
-This project showcases a Hardhat 3 Beta project using `mocha` for tests and the `ethers` library for Ethereum interactions.
+Team: Athltech
+Theme: Blockchain & Cybersecurity
+Problem: Mitigating National Security Risks Posed by Large Language Models (LLMs) in AI-Driven Malign Information Operations.
 
-To learn more about the Hardhat 3 Beta, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3 Beta](https://hardhat.org/hardhat3-beta-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+# Project Description
 
-## Project Overview
+Cyber Guardian is a multi-modal AI and blockchain platform designed to automatically detect, analyze, and neutralize AI-driven malign information operations. It addresses the challenge of rapidly detecting AI-generated disinformation at scale by integrating advanced AI models with an immutable blockchain ledger, providing a secure and verifiable system for national security.
 
-This example project includes:
+# Key Features
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using `mocha` and ethers.js
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+* **Multi-Modal Analysis:** Analyzes **text**, **images**, and **videos** for signs of AI generation, toxicity, and malicious sentiment using a suite of specialized AI models.
+* **Custom AI Detector:** Utilizes a custom-trained **DistilBERT** model for high-accuracy detection of AI-generated text.
+* **Advanced Image/Video Analysis:** Employs **OpenAI's CLIP** model for semantic analysis to identify AI-generated or manipulated visual content.
+* **Immutable Blockchain Ledger:** Records a unique **SHA256 hash** of detected threats onto the **Sepolia blockchain** via a Solidity smart contract, creating a tamper-proof audit trail.
+* **Database Logging:** Stores all analysis results, including scores, threat status, content hash, and blockchain transaction hash, in a **MongoDB** database for historical review.
+* **Interactive Dashboard:** A modern React frontend provides a user-friendly interface for submitting content, viewing detailed analysis reports, and monitoring a live history feed from the database.
+* **Static File Serving:** Serves analyzed images and videos directly from the backend for review via the dashboard history.
 
-## Usage
+# 🛠️ Tech Stack
 
-### Running Tests
+* **Frontend:** React (Vite), Tailwind CSS, Axios, Ethers.js
+* **Backend:** Python, FastAPI, Uvicorn, Web3.py, Pillow, OpenCV, NumPy
+* **AI/ML:** Hugging Face Transformers, PyTorch, Custom DistilBERT, `martin-ha/toxic-comment-model`, `cardiffnlp/twitter-roberta-base-sentiment-latest`, `openai/clip-vit-large-patch14`, Pandas, Scikit-learn
+* **Blockchain:** Solidity, Foundry (Forge), OpenZeppelin Contracts, Sepolia Testnet, Alchemy, MetaMask
+* **Database:** MongoDB (Community Server / Atlas), PyMongo
+* **Tooling:** Git, GitHub, VS Code, venv, npm
 
-To run all the tests in the project, execute the following command:
+## ⚙️ Setup & Installation
 
-```shell
-npx hardhat test
-```
+**Prerequisites:**
+* Python 3.9+
+* Node.js & npm
+* Git
+* Foundry (installation instructions: [Foundry Book](https://book.getfoundry.sh/getting-started/installation))
+* MongoDB Community Server (or MongoDB Atlas account)
+* MetaMask browser extension
 
-You can also selectively run the Solidity or `mocha` tests:
+**Steps:**
 
-```shell
-npx hardhat test solidity
-npx hardhat test mocha
-```
+1.  **Clone the Repository:**
+    ```bash
+    git clone [https://github.com/your-username/sih-cyber-guardian.git](https://github.com/your-username/sih-cyber-guardian.git)
+    cd sih-cyber-guardian
+    ```
 
-### Make a deployment to Sepolia
+2.  **Backend Setup:**
+    ```bash
+    cd backend
+    python -m venv ../venv # Create venv in the root project folder
+    ../venv/Scripts/activate # Activate venv (use source ../venv/bin/activate on Mac/Linux)
+    pip install -r requirements.txt
+    cp ../sih2/out/AlertContract.sol/AlertContract.json . # Copy ABI file
+    # Create and populate backend/.env file with your keys (see example above)
+    cd ..
+    ```
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
+3.  **Smart Contract Setup (Optional - If you need to re-deploy):**
+    ```bash
+    cd sih2
+    forge install OpenZeppelin/openzeppelin-contracts
+    forge build
+    # (Optional) Deploy: forge create --rpc-url ... --private-key ... src/AlertContract.sol:AlertContract --broadcast
+    cd ..
+    ```
 
-To run the deployment to a local chain:
+4.  **Frontend Setup:**
+    ```bash
+    cd frontend
+    npm install
+    # Create and populate frontend/.env file with your keys (see example above)
+    cd ..
+    ```
 
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
-```
+5.  **Train Custom AI Model (One-Time Setup):**
+    * Ensure your backend `venv` is active.
+    * Navigate to the `backend` folder.
+    * Run the training script (this will take a while):
+        ```bash
+        python train.py
+        ```
+    * This creates the `my_custom_ai_detector` folder.
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+## ▶️ Running the Project
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+You need **three terminals** running simultaneously.
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+1.  **Terminal 1: Start MongoDB Server**
+    ```bash
+    mongod
+    ```
+    *(Leave this running)*
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
+2.  **Terminal 2: Start Backend API**
+    ```bash
+    cd backend
+    ../venv/Scripts/activate
+    uvicorn main:app --reload
+    ```
+    *(Leave this running)*
 
-After setting the variable, you can run the deployment with the Sepolia network:
+3.  **Terminal 3: Start Frontend Dashboard**
+    ```bash
+    cd frontend
+    npm run dev
+    ```
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+Open your browser to `http://localhost:5173` (or the port specified by Vite) to access the Cyber Guardian dashboard.
+
+## 🚀 Usage
+
+1.  **Analyze Content:**
+    * Paste text into the text area OR click the "Upload Media" button to select an image or video file.
+    * Click "Analyze".
+2.  **View Results:**
+    * The "Analysis Report" panel will display the scores, threat status, and blockchain transaction hash (if applicable).
+3.  **Check History:**
+    * Scroll down to the "Analysis History" table to see all past analyses fetched from the database. Click on file paths to view uploaded media.
+4.  **Monitor Live Threats:**
+    * The "Live Threat Feed" panel shows the latest threats recorded directly from the blockchain.
